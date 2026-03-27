@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <title>CORE MONITOR | KERNEL DASHBOARD</title>
+    <style>
+        :root { --suse-green: #73ba25; --bg: #0c1214; --card: #1a2326; --text: #eef2f3; }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; display: flex; height: 95vh; gap: 20px; overflow: hidden; }
+        .sidebar { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; border-right: 1px solid rgba(115,186,37,0.1); padding-right: 10px; }
+        .shield-card { background: var(--card); border-radius: 10px; padding: 15px; cursor: pointer; border: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; transition: 0.1s; }
+        .shield-card.active { border-left: 5px solid var(--suse-green); background: rgba(115,186,37,0.1); }
+        .inspector { flex: 3; background: var(--card); border-radius: 20px; padding: 25px; display: flex; flex-direction: column; }
+        .proc-view { flex-grow: 1; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 10px; padding: 15px; font-family: 'Consolas', monospace; margin-top: 15px; }
+        .proc-line { padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.02); display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+        .badge { background: var(--suse-green); color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; }
+        .total-box { background: rgba(115,186,37,0.1); border: 1px solid var(--suse-green); padding: 10px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
+        input { width: 100%; background: #000; border: 1px solid var(--suse-green); padding: 12px; color: var(--suse-green); border-radius: 8px; outline: none; margin-bottom: 15px; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+    <div class="sidebar" id="sidebar"></div>
+    <div class="inspector">
+        <h1 style="color:var(--suse-green); margin:0; letter-spacing: 3px; font-weight: 900;">CORE MONITOR</h1>
+        <h2 id="core-title" style="margin-top:10px; font-weight: 300;">SELECTIONNER_UNITE</h2>
+        <input type="text" id="search" placeholder="FILTRER_PAR_NOM..." oninput="renderUI()">
+        <div class="proc-view" id="proc-list"></div>
+    </div>
+    <script>
+        let currentId = 0, globalData = null;
+        async function api(p) { await fetch(`http://127.0.0.1:8080${p}`); fetchData(); }
+        async function fetchData() { try { const res = await fetch('http://127.0.0.1:8080'); globalData = await res.json(); renderUI(); } catch(e) {} }
+        function renderUI() {
+            if(!globalData) return;
+            const term = document.getElementById('search').value.toLowerCase();
+            const totalTasks = globalData.cores.reduce((sum, c) => sum + c.procs.length, 0);
+
+            // Rendu Sidebar avec Total
+            let sidebarHtml = `
+                <div class="total-box">
+                    <div style="font-size:9px; opacity:0.6;">TOTAL_TASKS</div>
+                    <div style="font-size:24px; font-weight:900; color:var(--suse-green)">${totalTasks}</div>
+                </div>
+                <h3 style="color:var(--suse-green); font-size:11px; letter-spacing:2px; margin-bottom:10px;">SYSTEM_CORES</h3>`;
+           
+            sidebarHtml += globalData.cores.map(c => `
+                <div class="shield-card ${currentId===c.id?'active':''}" onclick="currentId=${c.id}">
+                    <span style="font-size:12px; font-weight:bold;">CORE_0${c.id}</span>
+                    <span class="badge">${c.procs.length}</span>
+                </div>`).join('');
+            document.getElementById('sidebar').innerHTML = sidebarHtml;
+
+            // Rendu Inspecteur
+            const core = globalData.cores.find(c => c.id === currentId);
+            if(core) {
+                document.getElementById('core-title').innerText = `UNITE_KERNEL_0${currentId}`;
+                const filtered = core.procs.filter(p => p.name.toLowerCase().includes(term));
+                document.getElementById('proc-list').innerHTML = filtered.map(p => `<div class="proc-line">
+                    <span><b>PID:${p.pid}</b> &nbsp; ${p.name}</span>
+                    <div style="display:flex; gap:3px;">
+                        ${globalData.cores.map(t => `<button onclick="api('/set_affinity?pid=${p.pid}&cpu=${t.id}')" style="background:${t.id===currentId?'var(--suse-green)':'#333'}; border:none; color:${t.id===currentId?'#000':'#fff'}; cursor:pointer; font-size:9px; padding:2px 4px; border-radius:3px;">C${t.id}</button>`).join('')}
+                    </div></div>`).join('');
+            }
+        }
+        setInterval(fetchData, 200);
+    </script>
+</body>
+</html>
