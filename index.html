@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <title>CORE MONITOR</title>
+    <style>
+        :root {
+            --suse-green: #73ba25; --bg: #0c1214; --card: #1a2326; --text: #eef2f3;
+            --shadow: 0 10px 30px rgba(0,0,0,0.5); --avast-orange: #ff7800;
+        }
+        [data-theme="light"] {
+            --bg: #f8f9fa; --card: #ffffff; --text: #2d3436;
+            --shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        body {
+            background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif;
+            margin: 0; padding: 20px; display: flex; height: 90vh; gap: 25px; transition: 0.3s;
+        }
+       
+        /* Liste Globale (Gauche) */
+        .sidebar {
+            flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;
+            padding-right: 15px; border-right: 1px solid rgba(115, 186, 37, 0.2);
+        }
+        .sidebar::-webkit-scrollbar { width: 4px; }
+        .sidebar::-webkit-scrollbar-thumb { background: var(--suse-green); border-radius: 10px; }
+
+        /* Style Carte Shield Agama */
+        .shield-card {
+            background: var(--card); border-radius: 12px; padding: 18px;
+            cursor: pointer; border: 1px solid rgba(255,255,255,0.05);
+            box-shadow: var(--shadow); transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .shield-card:hover { border-color: var(--suse-green); transform: translateX(8px); }
+        .shield-card.active { border-left: 6px solid var(--suse-green); background: rgba(115,186,37,0.08); box-shadow: 0 0 20px rgba(115,186,37,0.1); }
+
+        /* Panneau d'inspection (Droite) */
+        .inspector {
+            flex: 2; background: var(--card); border-radius: 25px; padding: 35px;
+            display: flex; flex-direction: column; box-shadow: var(--shadow);
+            border: 1px solid rgba(255,255,255,0.03);
+        }
+       
+        .proc-view {
+            flex-grow: 1; overflow-y: auto; background: rgba(0,0,0,0.25);
+            border-radius: 15px; padding: 25px; font-family: 'Consolas', monospace;
+            color: #95d34b; margin-top: 20px; border: 1px solid rgba(115, 186, 37, 0.1);
+        }
+        .proc-line { padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 13px; }
+
+        .count-badge { background: var(--suse-green); color: black; padding: 2px 8px; border-radius: 10px; font-weight: 900; font-size: 12px; }
+        .alert { background: var(--avast-orange) !important; box-shadow: 0 0 10px var(--avast-orange); }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar" id="sidebar">
+        <h3 style="color:var(--suse-green); font-size: 11px; letter-spacing: 2px; margin-bottom: 20px;">SYSTEM_CORES_OVERVIEW</h3>
+        <!-- Liste dynamique -->
+    </div>
+
+    <div class="inspector">
+        <div id="inspector-header">
+            <h1 style="margin:0; font-weight: 300;">Inspection <strong id="selected-id" style="color:var(--suse-green)">Unité 00</strong></h1>
+            <p id="selected-meta" style="opacity:0.6; font-size: 13px; margin-top: 5px;">Analyse des processus en temps réel...</p>
+        </div>
+        <div class="proc-view" id="proc-list">
+            // en_attente_de_selection_coeur...
+        </div>
+    </div>
+
+    <script>
+        let currentSelectedId = 0; // Cœur 0 sélectionné par défaut
+        let globalData = null;
+
+        async function refresh() {
+            try {
+                const response = await fetch('http://127.0.0.1:8080');
+                globalData = await response.json();
+                renderUI();
+            } catch(e) { console.error("Serveur C hors ligne."); }
+        }
+
+        function renderUI() {
+            if (!globalData) return;
+
+            // 1. Rendu de la Sidebar (Tous les cœurs)
+            const sidebar = document.getElementById('sidebar');
+            const coresHtml = globalData.cores.map(c => {
+                const procs = c.procs.split(',').filter(p => p.trim() !== "");
+                const isHeavy = procs.length > 40;
+                return `
+                    <div class="shield-card ${currentSelectedId === c.id ? 'active' : ''}" onclick="selectCore(${c.id})">
+                        <div>
+                            <div style="font-size:9px; opacity:0.4;">CORE_ID_0${c.id}</div>
+                            <div style="font-size:14px; font-weight:bold;">${procs.length} <small style="font-weight:normal; font-size:10px">PROCS</small></div>
+                        </div>
+                        <div class="count-badge ${isHeavy ? 'alert' : ''}">${procs.length}</div>
+                    </div>
+                `;
+            }).join('');
+            sidebar.innerHTML = `<h3 style="color:var(--suse-green); font-size: 11px; letter-spacing: 2px; margin-bottom: 20px;">SYSTEM_CORES_OVERVIEW</h3>` + coresHtml;
+
+            // 2. Rendu de l'Inspecteur (Cœur cliqué)
+            const activeCore = globalData.cores.find(c => c.id === currentSelectedId);
+            if (activeCore) {
+                const procs = activeCore.procs.split(',').map(p => p.trim()).filter(p => p !== "");
+                document.getElementById('selected-id').innerText = `Unité 0${currentSelectedId}`;
+                document.getElementById('selected-meta').innerText = `${procs.length} processus actifs détectés par le noyau.`;
+                document.getElementById('proc-list').innerHTML = procs.length > 0 ?
+                    procs.map(p => `<div class="proc-line"><span style="color:var(--suse-green)">[LIVE]</span> > ${p}</div>`).join('') :
+                    "Aucun processus utilisateur sur ce cœur.";
+            }
+        }
+
+        function selectCore(id) {
+            currentSelectedId = id;
+            renderUI(); // Mise à jour immédiate au clic
+        }
+
+        setInterval(refresh, 1000);
+        refresh();
+    </script>
+</body>
+</html>
